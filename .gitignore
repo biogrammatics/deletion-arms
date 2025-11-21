@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Output files
+*_designs.txt
+*_output.txt
+designs_output.txt
+priced_designs.txt
+corrected_designs.txt
+final_designs.txt
+
+# Test outputs
+test_*.txt
+first_10_designs.txt
+
+# Large sequence files (keep in .gitignore, download separately)
+sequences.fa
+
+# Temporary/intermediate files
+*.tmp
+*.bak
+summarize.py
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Keep these files (negation patterns)
+!test_example.fasta
+!test_stuffer.fasta

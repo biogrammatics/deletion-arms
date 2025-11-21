@@ -1,0 +1,35 @@
+# Available Blunt-Cutting Restriction Enzymes for Knockout Construct Design
+# This file lists enzymes that:
+#   1. Cut with blunt ends
+#   2. Do NOT cut any of the cloning vectors (pR-B, pR-H, pR-N, pR-Z)
+#
+# Format: Enzyme_Name <tab> Recognition_Sequence <tab> Cost_Tier <tab> NEB_Price <tab> NEB_Units <tab> Notes
+# Recognition sequence uses ⇅ to mark cut site
+# Cost tiers: inexpensive, moderate, expensive, unknown
+# NEB_Price: Price in USD for the catalog size
+# NEB_Units: Number of units in the catalog size
+# Lines starting with # are comments and will be ignored
+#
+# IUPAC Degenerate Base Codes:
+#   R = A or G    Y = C or T    M = A or C    K = G or T
+#   S = G or C    W = A or T    N = any base
+#
+# Cost per unit = NEB_Price / NEB_Units (lower is better for prioritization)
+#
+Enzyme_Name	Recognition_Sequence	Cost_Tier	NEB_Price	NEB_Units	Notes
+EcoRV-HF	GAT⇅ATC	inexpensive	283	50000	High-fidelity version of EcoRV
+HpaI	GTT⇅AAC	inexpensive	308	2500
+SmaI	CCC⇅GGG	inexpensive	308	10000	Time-Saver qualified
+AfeI	AGC⇅GCT	moderate	341	1000
+Eco53kI	GAG⇅CTC	moderate	72	1000
+PmeI	GTTT⇅AAAC	moderate	354	2500	Rare cutter (8bp recognition)
+PmlI	CAC⇅GTG	moderate	331	10000
+SfoI	GGC⇅GCC	moderate	317	2500
+StuI	AGG⇅CCT	moderate	308	5000
+BstZ17I-HF	GTA⇅TAC	expensive	331	5000	High-fidelity version
+PsiI-v2	TTA⇅TAA	expensive	555	2000
+SnaBI	TAC⇅GTA	expensive	294	2500
+SrfI	GCCC⇅GGGC	expensive	416	2500	Rare cutter (8bp recognition)
+BmgBI	CAC⇅GTC	unknown	341	2500
+BsaAI	YAC⇅GTR	unknown	80	500	Has degenerate bases
+BsrBI	CCG⇅CTC	unknown	331	5000
