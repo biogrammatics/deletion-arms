@@ -11,9 +11,18 @@ python3 deletion_arms_designer.py input.fasta
 # Save output to file
 python3 deletion_arms_designer.py input.fasta -o results.txt
 
-# Generate FASTA of construct sequences
+# Generate FASTA of construct sequences (uses balanced optimization by default)
 python3 generate_construct_fasta.py input.fasta -o constructs.fa
 ```
+
+## Scripts Overview
+
+| Script | Purpose | Default Optimization |
+|--------|---------|---------------------|
+| `deletion_arms_designer.py` | Detailed design reports | Cost-only (cw=1.0, lw=0.0) |
+| `generate_construct_fasta.py` | FASTA output for synthesis | Balanced (cw=0.5, lw=0.5) |
+
+Both scripts accept the same command-line options.
 
 ## Input File Format
 
@@ -48,20 +57,30 @@ python3 generate_input_from_gff.py genome.fasta annotations.gff -o input.fasta
 | Option | Short | Default | Description |
 |--------|-------|---------|-------------|
 | `--output` | `-o` | stdout | Output file for results |
-| `--vector` | `-v` | none | Vector sequence file to check for RE site conflicts |
+| `--vector` | `-v` | none | Additional vector to check for RE site conflicts (see note below) |
 | `--stuffer` | `-s` | none | Custom stuffer insert sequence (FASTA) |
 | `--enzymes` | `-e` | enzymes.tsv | Enzyme list TSV file |
 | `--arm-length` | `-a` | 1500 | Length of homology arms in bp |
 | `--half-site-range` | `-r` | 900 1300 | Min/max distance from deletion for half-sites |
-| `--max-designs` | `-m` | 5 | Maximum designs to output per gene |
-| `--cost-weight` | `-cw` | 1.0 | Weight for enzyme cost optimization (0-1) |
-| `--length-weight` | `-lw` | 0.0 | Weight for arm length optimization (0-1) |
+| `--max-designs` | `-m` | 5 (designer) / 4 (fasta) | Maximum designs to output per gene |
+| `--cost-weight` | `-cw` | 1.0 (designer) / 0.5 (fasta) | Weight for enzyme cost optimization (0-1) |
+| `--length-weight` | `-lw` | 0.0 (designer) / 0.5 (fasta) | Weight for arm length optimization (0-1) |
+
+### Note on Vector Checking
+
+The default `enzymes.tsv` file contains enzymes that have been **pre-screened** to NOT cut the following vectors:
+- pR-B
+- pR-H
+- pR-N
+- pR-Z
+
+The `--vector` option is only needed if you are using an **additional vector** not in this pre-screened set. It performs a runtime check to exclude any enzymes that would cut your custom vector.
 
 ## Optimization Strategies
 
 The tool ranks designs using a combined score based on enzyme cost and arm length. Use `--cost-weight` and `--length-weight` to control priorities.
 
-### Cost-Only (Default)
+### Cost-Only (Default for deletion_arms_designer.py)
 Minimize enzyme cost, ignore arm length:
 ```bash
 python3 deletion_arms_designer.py input.fasta --cost-weight 1.0 --length-weight 0.0
@@ -73,7 +92,7 @@ Maximize arm length for better recombination efficiency:
 python3 deletion_arms_designer.py input.fasta --cost-weight 0.0 --length-weight 1.0
 ```
 
-### Balanced
+### Balanced (Default for generate_construct_fasta.py)
 Equal priority to cost and length:
 ```bash
 python3 deletion_arms_designer.py input.fasta --cost-weight 0.5 --length-weight 0.5
@@ -112,7 +131,7 @@ When different enzymes are used for each site, a stuffer fragment connects them:
 
 The stuffer contains:
 - Right half of RE1
-- AT-rich filler (or custom sequence)
+- AT-rich filler (or custom sequence via `--stuffer`)
 - Left half of RE2
 
 ## Examples
@@ -122,8 +141,8 @@ The stuffer contains:
 python3 deletion_arms_designer.py genes.fasta
 ```
 
-### With Vector Checking
-Exclude enzymes that cut the cloning vector:
+### Check Against Additional Vector
+If using a vector other than pR-B/H/N/Z, check for conflicts:
 ```bash
 python3 deletion_arms_designer.py genes.fasta --vector pUC19.fasta
 ```
@@ -137,7 +156,7 @@ python3 deletion_arms_designer.py genes.fasta \
 ```
 
 ### Custom Stuffer Insert
-Include a selectable marker in the stuffer:
+Include a selectable marker in the stuffer (for two-enzyme designs):
 ```bash
 python3 deletion_arms_designer.py genes.fasta --stuffer marker.fasta
 ```
@@ -145,16 +164,23 @@ python3 deletion_arms_designer.py genes.fasta --stuffer marker.fasta
 ### Generate FASTA Output
 Create a FASTA file of construct sequences for synthesis:
 ```bash
+# Uses balanced optimization by default
+python3 generate_construct_fasta.py genes.fasta --output constructs.fa
+
+# With custom settings
 python3 generate_construct_fasta.py genes.fasta \
     --max-designs 4 \
-    --cost-weight 0.5 \
-    --length-weight 0.5 \
+    --arm-length 2000 \
+    --cost-weight 0.7 \
+    --length-weight 0.3 \
     --output constructs.fa
 ```
 
 ## Output Format
 
-The main script outputs detailed design information:
+### deletion_arms_designer.py
+
+Outputs detailed design information:
 
 ```
 ================================================================================
@@ -187,19 +213,36 @@ Upstream arm (1500 bp) starting with: TAATACCGATGCAAGAATAA...
   → Right half: GTG
 ```
 
+### generate_construct_fasta.py
+
+Outputs FASTA format with descriptive headers:
+
+```
+>Gene_1_design1_PmlI_down1139bp_up1192bp
+ACTATCACTTGGCTAGTCGGTTCCATTTCTGATAGTAATAGATATAAATATAAATTAGCT
+ATTTATTGATTGACACTTAT...
+```
+
+Header format: `{gene}_{design#}_{enzyme(s)}_{downstream_length}_{upstream_length}`
+
 ## Enzyme File Format
 
 The `enzymes.tsv` file defines available restriction enzymes:
 
 ```tsv
 Enzyme_Name	Recognition_Sequence	Cost_Tier	NEB_Price	NEB_Units	Notes
-EcoRV-HF	GAT⇅ATC	inexpensive	283	50000	High-fidelity version
-SmaI	CCC⇅GGG	inexpensive	308	10000	Time-Saver qualified
+EcoRV-HF	GAT⇅ATC	inexpensive	283	50000	High-fidelity version, $0.0057/unit
+SmaI	CCC⇅GGG	inexpensive	308	10000	Time-Saver qualified, $0.0308/unit
+PmlI	CAC⇅GTG	inexpensive	331	10000	$0.0331/unit
 ```
 
 - `⇅` marks the cut site (blunt cutters only)
-- Cost tiers: `inexpensive` (<$0.05/unit), `moderate` ($0.05-0.10/unit), `expensive` (>$0.10/unit)
+- Cost tiers based on actual $/unit:
+  - `inexpensive`: < $0.05/unit
+  - `moderate`: $0.05 - $0.10/unit
+  - `expensive`: > $0.10/unit
 - Enzymes are automatically sorted by cost per unit
+- Pre-screened to not cut vectors: pR-B, pR-H, pR-N, pR-Z
 
 ## Troubleshooting
 
@@ -215,3 +258,7 @@ SmaI	CCC⇅GGG	inexpensive	308	10000	Time-Saver qualified
 ### Arm lengths too short
 - Increase `--length-weight` to prioritize longer arms
 - Expand the half-site search range toward the deletion boundary
+
+### Need to use a different vector
+- Use `--vector your_vector.fasta` to exclude enzymes that cut your vector
+- The default enzyme list already excludes enzymes cutting pR-B, pR-H, pR-N, pR-Z
