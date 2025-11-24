@@ -68,11 +68,81 @@ class ConstructDesign:
     deletion_region: str
     custom_stuffer: str = ""  # Optional custom stuffer insert sequence
 
+    @property
+    def needs_stuffer(self) -> bool:
+        """Check if stuffer fragment is needed (only when enzymes differ)"""
+        return self.re1.name != self.re2.name
+
+    @property
+    def total_enzyme_cost(self) -> float:
+        """
+        Calculate total enzyme cost per unit for this design.
+        For single-enzyme designs, returns just that enzyme's cost.
+        For two-enzyme designs, returns the sum of both costs.
+        """
+        if self.needs_stuffer:
+            return self.re1.cost_per_unit + self.re2.cost_per_unit
+        else:
+            return self.re1.cost_per_unit
+
+    @property
+    def downstream_arm_length(self) -> int:
+        """
+        Effective downstream arm length (from start to restriction cut site).
+        This is the portion that will participate in homologous recombination.
+        """
+        return self.downstream_half_site.position + len(self.re1.left_half)
+
+    @property
+    def upstream_arm_length(self) -> int:
+        """
+        Effective upstream arm length (from restriction cut site to end).
+        This is the portion that will participate in homologous recombination.
+        """
+        return len(self.upstream_arm) - self.upstream_half_site.position
+
+    @property
+    def total_arm_length(self) -> int:
+        """Total effective arm length (sum of both arms)."""
+        return self.downstream_arm_length + self.upstream_arm_length
+
+    def optimization_score(self, cost_weight: float = 1.0, length_weight: float = 0.0,
+                          max_cost: float = 1.0, max_length: int = 3000) -> float:
+        """
+        Calculate combined optimization score (lower is better).
+
+        Args:
+            cost_weight: Weight for enzyme cost (0-1, default 1.0)
+            length_weight: Weight for arm length penalty (0-1, default 0.0)
+            max_cost: Maximum expected cost for normalization (default $1.00/unit)
+            max_length: Maximum possible arm length for normalization (default 3000bp)
+
+        Returns:
+            Combined score where lower is better.
+            Score = cost_weight * (normalized_cost) + length_weight * (1 - normalized_length)
+        """
+        # Normalize cost (0 to 1, where 0 is free and 1 is max_cost)
+        normalized_cost = min(self.total_enzyme_cost / max_cost, 1.0)
+
+        # Normalize length (0 to 1, where 1 is max_length)
+        # We invert this so that longer arms = lower score (better)
+        normalized_length = min(self.total_arm_length / max_length, 1.0)
+        length_penalty = 1.0 - normalized_length  # Higher penalty for shorter arms
+
+        return cost_weight * normalized_cost + length_weight * length_penalty
+
     def generate_stuffer(self, length: int = 50) -> str:
         """
         Generate stuffer fragment sequence
         Format: [Right half RE1] + [custom insert OR filler] + [Left half RE2]
+
+        Returns empty string if both restriction sites use the same enzyme,
+        since the sites are compatible and no stuffer is needed.
         """
+        # No stuffer needed if both sites use the same enzyme
+        if not self.needs_stuffer:
+            return ""
+
         if self.custom_stuffer:
             # Use custom stuffer insert (user-provided sequence)
             return self.re1.right_half + self.custom_stuffer + self.re2.left_half
@@ -97,39 +167,69 @@ class ConstructDesign:
         output.append(f"\n{'='*80}")
         output.append(f"CONSTRUCT DESIGN FOR: {self.gene_name}")
         output.append(f"{'='*80}")
-        output.append(f"\nEnzyme 1: {self.re1.name} ({self.re1.recognition_seq})")
-        output.append(f"  - Cost tier: {self.re1.cost_tier}")
-        if self.re1.neb_price > 0:
-            output.append(f"  - Price: ${self.re1.neb_price:.2f} for {self.re1.neb_units} units (${self.re1.cost_per_unit:.4f}/unit)")
-        output.append(f"  - Half-site in downstream arm: {self.downstream_half_site.sequence} at position {self.downstream_half_site.position}")
-        output.append(f"\nEnzyme 2: {self.re2.name} ({self.re2.recognition_seq})")
-        output.append(f"  - Cost tier: {self.re2.cost_tier}")
-        if self.re2.neb_price > 0:
-            output.append(f"  - Price: ${self.re2.neb_price:.2f} for {self.re2.neb_units} units (${self.re2.cost_per_unit:.4f}/unit)")
-        output.append(f"  - Half-site in upstream arm: {self.upstream_half_site.sequence} at position {self.upstream_half_site.position}")
+
+        if self.needs_stuffer:
+            # Two different enzymes
+            output.append(f"\nEnzyme 1: {self.re1.name} ({self.re1.recognition_seq})")
+            output.append(f"  - Cost tier: {self.re1.cost_tier}")
+            if self.re1.neb_price > 0:
+                output.append(f"  - Price: ${self.re1.neb_price:.2f} for {self.re1.neb_units} units (${self.re1.cost_per_unit:.4f}/unit)")
+            output.append(f"  - Half-site in downstream arm: {self.downstream_half_site.sequence} at position {self.downstream_half_site.position}")
+            output.append(f"\nEnzyme 2: {self.re2.name} ({self.re2.recognition_seq})")
+            output.append(f"  - Cost tier: {self.re2.cost_tier}")
+            if self.re2.neb_price > 0:
+                output.append(f"  - Price: ${self.re2.neb_price:.2f} for {self.re2.neb_units} units (${self.re2.cost_per_unit:.4f}/unit)")
+            output.append(f"  - Half-site in upstream arm: {self.upstream_half_site.sequence} at position {self.upstream_half_site.position}")
+            output.append(f"\nTotal enzyme cost: ${self.total_enzyme_cost:.4f}/unit (combined)")
+        else:
+            # Same enzyme for both sites - no stuffer needed
+            output.append(f"\nEnzyme: {self.re1.name} ({self.re1.recognition_seq})")
+            output.append(f"  - Cost tier: {self.re1.cost_tier}")
+            if self.re1.neb_price > 0:
+                output.append(f"  - Price: ${self.re1.neb_price:.2f} for {self.re1.neb_units} units (${self.re1.cost_per_unit:.4f}/unit)")
+            output.append(f"  - Left half in downstream arm: {self.downstream_half_site.sequence} at position {self.downstream_half_site.position}")
+            output.append(f"  - Right half in upstream arm: {self.upstream_half_site.sequence} at position {self.upstream_half_site.position}")
+            output.append(f"\nTotal enzyme cost: ${self.total_enzyme_cost:.4f}/unit")
+            output.append(f"  ★ Single enzyme design - no stuffer fragment needed!")
+
+        # Arm length summary
+        output.append(f"\nEffective arm lengths:")
+        output.append(f"  - Downstream: {self.downstream_arm_length} bp")
+        output.append(f"  - Upstream: {self.upstream_arm_length} bp")
+        output.append(f"  - Total: {self.total_arm_length} bp")
 
         output.append(f"\n{'-'*80}")
         output.append("CONSTRUCT STRUCTURE:")
         output.append(f"{'-'*80}")
         output.append(f"Downstream arm ({len(self.downstream_arm)} bp) ending with: ...{self.downstream_arm[-20:]}")
-        output.append(f"  → Left half RE1: {self.re1.left_half}")
-        output.append(f"\nStuffer fragment ({len(stuffer)} bp): {stuffer}")
-        output.append(f"  → Right half RE1: {self.re1.right_half}")
-        output.append(f"  → Left half RE2: {self.re2.left_half}")
+        output.append(f"  → Left half: {self.re1.left_half}")
+
+        if self.needs_stuffer:
+            output.append(f"\nStuffer fragment ({len(stuffer)} bp): {stuffer}")
+            output.append(f"  → Right half RE1: {self.re1.right_half}")
+            output.append(f"  → Left half RE2: {self.re2.left_half}")
+        else:
+            output.append(f"\n  [No stuffer - direct junction]")
+
         output.append(f"\nUpstream arm ({len(self.upstream_arm)} bp) starting with: {self.upstream_arm[:20]}...")
-        output.append(f"  → Right half RE2: {self.re2.right_half}")
+        output.append(f"  → Right half: {self.re2.right_half}")
 
         output.append(f"\n{'-'*80}")
         output.append("CLONING FRAGMENT:")
         output.append(f"{'-'*80}")
 
         # Show the junction regions
-        down_end = self.downstream_arm[-30:] + self.re1.left_half
-        stuffer_seq = self.re1.right_half + "..." + self.re2.left_half
-        up_start = self.re2.right_half + self.upstream_arm[:30]
-
-        output.append(f"...{down_end}|{stuffer_seq}|{up_start}...")
-        output.append(f"         {'▲ RE1 site ▲':^20}   {'▲ RE2 site ▲':^20}")
+        if self.needs_stuffer:
+            down_end = self.downstream_arm[-30:] + self.re1.left_half
+            stuffer_seq = self.re1.right_half + "..." + self.re2.left_half
+            up_start = self.re2.right_half + self.upstream_arm[:30]
+            output.append(f"...{down_end}|{stuffer_seq}|{up_start}...")
+            output.append(f"         {'▲ RE1 site ▲':^20}   {'▲ RE2 site ▲':^20}")
+        else:
+            down_end = self.downstream_arm[-30:] + self.re1.left_half
+            up_start = self.re2.right_half + self.upstream_arm[:30]
+            output.append(f"...{down_end}|{up_start}...")
+            output.append(f"              {'▲ Single RE site ▲':^30}")
 
         output.append(f"\nDeletion size: {len(self.deletion_region)} bp")
 
@@ -352,7 +452,9 @@ class DeletionArmsDesigner:
                          arm_length: int = 1500,
                          half_site_min: int = 900,
                          half_site_max: int = 1300,
-                         max_designs: int = 5) -> List[ConstructDesign]:
+                         max_designs: int = 5,
+                         cost_weight: float = 1.0,
+                         length_weight: float = 0.0) -> List[ConstructDesign]:
         """
         Main function to design knockout constructs
 
@@ -364,6 +466,8 @@ class DeletionArmsDesigner:
             half_site_min: Minimum distance from deletion for half-sites (default: 900)
             half_site_max: Maximum distance from deletion for half-sites (default: 1300)
             max_designs: Maximum number of designs to return per gene
+            cost_weight: Weight for enzyme cost optimization (0-1, default 1.0)
+            length_weight: Weight for arm length optimization (0-1, default 0.0)
         """
         sequences = self.parse_fasta(fasta_file)
         all_designs = []
@@ -414,14 +518,12 @@ class DeletionArmsDesigner:
                 for down_match in downstream_matches:
                     down_match.in_upstream = False
 
-                    # Now find a different enzyme for RE2
+                    # Now find enzyme for RE2 (can be same as RE1 for single-enzyme designs)
                     for re2 in self.enzymes:
-                        if re2.name == re1.name:
-                            continue
-
-                        # CRITICAL: Check that RE2 doesn't appear anywhere in the construct
-                        if not self.check_site_absent_in_construct(re2, upstream, downstream):
-                            continue
+                        # If different enzyme, check that RE2 doesn't appear anywhere in the construct
+                        if re2.name != re1.name:
+                            if not self.check_site_absent_in_construct(re2, upstream, downstream):
+                                continue
 
                         # Find right half of RE2 in upstream arm
                         # Convert distance from deletion to position from start of upstream arm
@@ -457,15 +559,18 @@ class DeletionArmsDesigner:
                             )
                             designs_for_gene.append(design)
 
-                            # Stop if we have enough designs
-                            if len(designs_for_gene) >= max_designs:
-                                break
+            # Sort designs by optimization score (lower is better)
+            # Score combines enzyme cost and arm length based on configured weights
+            # max_length is 2 * arm_length (theoretical max for both arms combined)
+            max_length = 2 * arm_length
+            designs_for_gene.sort(key=lambda d: (
+                d.optimization_score(cost_weight, length_weight, max_length=max_length),
+                d.re1.name,
+                d.re2.name
+            ))
 
-                        if len(designs_for_gene) >= max_designs:
-                            break
-
-                if len(designs_for_gene) >= max_designs:
-                    break
+            # Take only the best designs up to max_designs
+            designs_for_gene = designs_for_gene[:max_designs]
 
             print(f"  Found {len(designs_for_gene)} valid design(s)")
             all_designs.extend(designs_for_gene)
@@ -486,6 +591,16 @@ Example usage:
   %(prog)s input.fasta --vector pUC19.fasta --stuffer marker.fasta
   %(prog)s input.fasta --arm-length 2000 --half-site-range 1000 1500
   %(prog)s input.fasta --max-designs 10 --output results.txt
+
+Optimization weights:
+  --cost-weight and --length-weight control how designs are ranked.
+  Both weights should be between 0 and 1. Higher weight = more importance.
+
+  Examples:
+    --cost-weight 1.0 --length-weight 0.0   # Cost only (default)
+    --cost-weight 0.0 --length-weight 1.0   # Length only (maximize arm length)
+    --cost-weight 0.5 --length-weight 0.5   # Balance cost and length equally
+    --cost-weight 0.7 --length-weight 0.3   # Prefer cost, but consider length
         """
     )
 
@@ -501,6 +616,10 @@ Example usage:
                        help='Distance range from deletion for half-sites in bp (default: 900 1300)')
     parser.add_argument('--max-designs', '-m', type=int, default=5,
                        help='Maximum designs per gene (default: 5)')
+    parser.add_argument('--cost-weight', '-cw', type=float, default=1.0,
+                       help='Weight for enzyme cost optimization, 0-1 (default: 1.0)')
+    parser.add_argument('--length-weight', '-lw', type=float, default=0.0,
+                       help='Weight for arm length optimization, 0-1 (default: 0.0)')
     parser.add_argument('--output', '-o', help='Output file (default: stdout)')
 
     args = parser.parse_args()
@@ -513,6 +632,7 @@ Example usage:
           f"{sum(1 for e in designer.enzymes if e.cost_tier == 'moderate')} moderate, "
           f"{sum(1 for e in designer.enzymes if e.cost_tier == 'expensive')} expensive")
     print(f"Configuration: {args.arm_length} bp arms, half-sites at {args.half_site_range[0]}-{args.half_site_range[1]} bp from deletion")
+    print(f"Optimization: cost_weight={args.cost_weight}, length_weight={args.length_weight}")
 
     # Design constructs
     designs = designer.design_constructs(
@@ -522,7 +642,9 @@ Example usage:
         arm_length=args.arm_length,
         half_site_min=args.half_site_range[0],
         half_site_max=args.half_site_range[1],
-        max_designs=args.max_designs
+        max_designs=args.max_designs,
+        cost_weight=args.cost_weight,
+        length_weight=args.length_weight
     )
 
     # Output results

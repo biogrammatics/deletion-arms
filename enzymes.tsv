@@ -5,7 +5,10 @@
 #
 # Format: Enzyme_Name <tab> Recognition_Sequence <tab> Cost_Tier <tab> NEB_Price <tab> NEB_Units <tab> Notes
 # Recognition sequence uses ⇅ to mark cut site
-# Cost tiers: inexpensive, moderate, expensive, unknown
+# Cost tiers based on cost per unit:
+#   inexpensive: < $0.05/unit
+#   moderate: $0.05 - $0.10/unit
+#   expensive: > $0.10/unit
 # NEB_Price: Price in USD for the catalog size
 # NEB_Units: Number of units in the catalog size
 # Lines starting with # are comments and will be ignored
@@ -17,19 +20,19 @@
 # Cost per unit = NEB_Price / NEB_Units (lower is better for prioritization)
 #
 Enzyme_Name	Recognition_Sequence	Cost_Tier	NEB_Price	NEB_Units	Notes
-EcoRV-HF	GAT⇅ATC	inexpensive	283	50000	High-fidelity version of EcoRV
-HpaI	GTT⇅AAC	inexpensive	308	2500
-SmaI	CCC⇅GGG	inexpensive	308	10000	Time-Saver qualified
-AfeI	AGC⇅GCT	moderate	341	1000
-Eco53kI	GAG⇅CTC	moderate	72	1000
-PmeI	GTTT⇅AAAC	moderate	354	2500	Rare cutter (8bp recognition)
-PmlI	CAC⇅GTG	moderate	331	10000
-SfoI	GGC⇅GCC	moderate	317	2500
-StuI	AGG⇅CCT	moderate	308	5000
-BstZ17I-HF	GTA⇅TAC	expensive	331	5000	High-fidelity version
-PsiI-v2	TTA⇅TAA	expensive	555	2000
-SnaBI	TAC⇅GTA	expensive	294	2500
-SrfI	GCCC⇅GGGC	expensive	416	2500	Rare cutter (8bp recognition)
-BmgBI	CAC⇅GTC	unknown	341	2500
-BsaAI	YAC⇅GTR	unknown	80	500	Has degenerate bases
-BsrBI	CCG⇅CTC	unknown	331	5000
+EcoRV-HF	GAT⇅ATC	inexpensive	283	50000	High-fidelity version, $0.0057/unit
+SmaI	CCC⇅GGG	inexpensive	308	10000	Time-Saver qualified, $0.0308/unit
+PmlI	CAC⇅GTG	inexpensive	331	10000	$0.0331/unit
+StuI	AGG⇅CCT	moderate	308	5000	$0.0616/unit
+BstZ17I-HF	GTA⇅TAC	moderate	331	5000	High-fidelity version, $0.0662/unit
+BsrBI	CCG⇅CTC	moderate	331	5000	$0.0662/unit
+Eco53kI	GAG⇅CTC	moderate	72	1000	$0.0720/unit
+SnaBI	TAC⇅GTA	expensive	294	2500	$0.1176/unit
+HpaI	GTT⇅AAC	expensive	308	2500	$0.1232/unit
+SfoI	GGC⇅GCC	expensive	317	2500	$0.1268/unit
+BmgBI	CAC⇅GTC	expensive	341	2500	$0.1364/unit
+PmeI	GTTT⇅AAAC	expensive	354	2500	Rare cutter (8bp recognition), $0.1416/unit
+BsaAI	YAC⇅GTR	expensive	80	500	Has degenerate bases, $0.1600/unit
+SrfI	GCCC⇅GGGC	expensive	416	2500	Rare cutter (8bp recognition), $0.1664/unit
+PsiI-v2	TTA⇅TAA	expensive	555	2000	$0.2775/unit
+AfeI	AGC⇅GCT	expensive	341	1000	$0.3410/unit
