@@ -38,19 +38,47 @@ def get_construct_name(design: ConstructDesign, design_num: int) -> str:
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description='Generate FASTA of construct sequences')
-    parser.add_argument('fasta', help='Input FASTA file')
-    parser.add_argument('--max-designs', '-m', type=int, default=4)
-    parser.add_argument('--cost-weight', '-cw', type=float, default=0.5)
-    parser.add_argument('--length-weight', '-lw', type=float, default=0.5)
-    parser.add_argument('--output', '-o', default='constructs.fa')
+    parser = argparse.ArgumentParser(
+        description='Generate FASTA file of construct DNA sequences',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Example usage:
+  %(prog)s input.fasta
+  %(prog)s input.fasta --vector pUC19.fasta --output constructs.fa
+  %(prog)s input.fasta --cost-weight 0.5 --length-weight 0.5
+        """
+    )
+
+    parser.add_argument('fasta', help='Input FASTA file with sequences')
+    parser.add_argument('--vector', '-v', help='Vector sequence file (optional)')
+    parser.add_argument('--stuffer', '-s', help='Stuffer insert FASTA file (optional)')
+    parser.add_argument('--enzymes', '-e', default='enzymes.tsv',
+                       help='Enzyme list TSV file (default: enzymes.tsv)')
+    parser.add_argument('--arm-length', '-a', type=int, default=1500,
+                       help='Length of homology arms in bp (default: 1500)')
+    parser.add_argument('--half-site-range', '-r', nargs=2, type=int, metavar=('MIN', 'MAX'),
+                       default=[900, 1300],
+                       help='Distance range from deletion for half-sites in bp (default: 900 1300)')
+    parser.add_argument('--max-designs', '-m', type=int, default=4,
+                       help='Maximum designs per gene (default: 4)')
+    parser.add_argument('--cost-weight', '-cw', type=float, default=0.5,
+                       help='Weight for enzyme cost optimization, 0-1 (default: 0.5)')
+    parser.add_argument('--length-weight', '-lw', type=float, default=0.5,
+                       help='Weight for arm length optimization, 0-1 (default: 0.5)')
+    parser.add_argument('--output', '-o', default='constructs.fa',
+                       help='Output FASTA file (default: constructs.fa)')
 
     args = parser.parse_args()
 
     # Run designer
-    designer = DeletionArmsDesigner()
+    designer = DeletionArmsDesigner(enzyme_file=args.enzymes)
     designs = designer.design_constructs(
         args.fasta,
+        vector_file=args.vector,
+        stuffer_file=args.stuffer,
+        arm_length=args.arm_length,
+        half_site_min=args.half_site_range[0],
+        half_site_max=args.half_site_range[1],
         max_designs=args.max_designs,
         cost_weight=args.cost_weight,
         length_weight=args.length_weight
