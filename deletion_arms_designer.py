@@ -418,6 +418,72 @@ class DeletionArmsDesigner:
 
         return matches
 
+    def deduplicate_matches_by_position(self, matches: List[HalfSiteMatch]) -> List[HalfSiteMatch]:
+        """
+        Deduplicate half-site matches by position, keeping only the cheapest enzyme.
+
+        When degenerate enzyme sites (like BsaAI: YAC⇅GTR) match at the same position
+        as more specific sites (like SnaBI: TAC⇅GTA), this keeps only the cheaper enzyme.
+
+        Args:
+            matches: List of HalfSiteMatch objects
+
+        Returns:
+            Deduplicated list with only the cheapest enzyme per position
+        """
+        if not matches:
+            return matches
+
+        # Group matches by position
+        by_position: Dict[int, List[HalfSiteMatch]] = {}
+        for m in matches:
+            if m.position not in by_position:
+                by_position[m.position] = []
+            by_position[m.position].append(m)
+
+        # For each position, keep only the cheapest enzyme
+        deduplicated = []
+        for pos, pos_matches in by_position.items():
+            # Sort by cost per unit (cheapest first)
+            pos_matches.sort(key=lambda m: m.enzyme.cost_per_unit)
+            deduplicated.append(pos_matches[0])
+
+        return deduplicated
+
+    def deduplicate_designs_by_position(self, designs: List[ConstructDesign]) -> List[ConstructDesign]:
+        """
+        Deduplicate designs that have the same half-site positions but use different enzymes.
+
+        When degenerate sites like BsaAI overlap with specific sites like SnaBI,
+        multiple designs may be generated for the same positions. This keeps only
+        the cheapest enzyme combination for each position pair.
+
+        Args:
+            designs: List of ConstructDesign objects
+
+        Returns:
+            Deduplicated list with only the cheapest enzyme combination per position pair
+        """
+        if not designs:
+            return designs
+
+        # Group designs by their half-site positions
+        by_positions: Dict[Tuple[int, int], List[ConstructDesign]] = {}
+        for d in designs:
+            key = (d.downstream_half_site.position, d.upstream_half_site.position)
+            if key not in by_positions:
+                by_positions[key] = []
+            by_positions[key].append(d)
+
+        # For each position pair, keep only the design with lowest total enzyme cost
+        deduplicated = []
+        for positions, pos_designs in by_positions.items():
+            # Sort by total enzyme cost (cheapest first)
+            pos_designs.sort(key=lambda d: d.total_enzyme_cost)
+            deduplicated.append(pos_designs[0])
+
+        return deduplicated
+
     def check_full_site_absent(self, sequence: str, enzyme: RestrictionEnzyme,
                               before_position: int) -> bool:
         """
@@ -454,7 +520,8 @@ class DeletionArmsDesigner:
                          half_site_max: int = 1300,
                          max_designs: int = 5,
                          cost_weight: float = 1.0,
-                         length_weight: float = 0.0) -> List[ConstructDesign]:
+                         length_weight: float = 0.0,
+                         available_enzymes: Optional[List[str]] = None) -> List[ConstructDesign]:
         """
         Main function to design knockout constructs
 
@@ -468,9 +535,20 @@ class DeletionArmsDesigner:
             max_designs: Maximum number of designs to return per gene
             cost_weight: Weight for enzyme cost optimization (0-1, default 1.0)
             length_weight: Weight for arm length optimization (0-1, default 0.0)
+            available_enzymes: Optional list of enzyme names to use (user's freezer stock)
         """
         sequences = self.parse_fasta(fasta_file)
         all_designs = []
+
+        # Filter enzymes if user specified available ones
+        if available_enzymes:
+            available_set = set(e.lower() for e in available_enzymes)
+            enzymes_to_use = [e for e in self.enzymes if e.name.lower() in available_set]
+            if not enzymes_to_use:
+                raise ValueError(f"None of the specified enzymes found in database: {available_enzymes}")
+            print(f"Using {len(enzymes_to_use)} user-specified enzymes: {[e.name for e in enzymes_to_use]}")
+        else:
+            enzymes_to_use = self.enzymes
 
         # Parse vector if provided
         vector_seq = None
@@ -495,7 +573,7 @@ class DeletionArmsDesigner:
             designs_for_gene = []
 
             # For each enzyme pair
-            for i, re1 in enumerate(self.enzymes):
+            for i, re1 in enumerate(enzymes_to_use):
                 # CRITICAL: Check that RE1 doesn't appear anywhere in the construct
                 # If it does, digestion will cut the construct into pieces
                 if not self.check_site_absent_in_construct(re1, upstream, downstream):
@@ -519,7 +597,7 @@ class DeletionArmsDesigner:
                     down_match.in_upstream = False
 
                     # Now find enzyme for RE2 (can be same as RE1 for single-enzyme designs)
-                    for re2 in self.enzymes:
+                    for re2 in enzymes_to_use:
                         # If different enzyme, check that RE2 doesn't appear anywhere in the construct
                         if re2.name != re1.name:
                             if not self.check_site_absent_in_construct(re2, upstream, downstream):
@@ -558,6 +636,14 @@ class DeletionArmsDesigner:
                                 custom_stuffer=stuffer_insert
                             )
                             designs_for_gene.append(design)
+
+            # Deduplicate designs where multiple enzymes match at the same positions
+            # (e.g., BsaAI and SnaBI overlapping due to degenerate bases)
+            # Keeps only the cheapest enzyme combination for each position pair
+            before_dedup = len(designs_for_gene)
+            designs_for_gene = self.deduplicate_designs_by_position(designs_for_gene)
+            if before_dedup != len(designs_for_gene):
+                print(f"  Deduplicated {before_dedup - len(designs_for_gene)} overlapping designs")
 
             # Sort designs by optimization score (lower is better)
             # Score combines enzyme cost and arm length based on configured weights
@@ -620,6 +706,8 @@ Optimization weights:
                        help='Weight for enzyme cost optimization, 0-1 (default: 1.0)')
     parser.add_argument('--length-weight', '-lw', type=float, default=0.0,
                        help='Weight for arm length optimization, 0-1 (default: 0.0)')
+    parser.add_argument('--use-enzymes', '-ue', nargs='+', metavar='ENZYME',
+                       help='Only use specified enzymes (e.g., --use-enzymes SnaBI EcoRV-HF)')
     parser.add_argument('--output', '-o', help='Output file (default: stdout)')
 
     args = parser.parse_args()
@@ -644,7 +732,8 @@ Optimization weights:
         half_site_max=args.half_site_range[1],
         max_designs=args.max_designs,
         cost_weight=args.cost_weight,
-        length_weight=args.length_weight
+        length_weight=args.length_weight,
+        available_enzymes=args.use_enzymes
     )
 
     # Output results

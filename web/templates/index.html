@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deletion Arms Designer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2563eb',
+                        secondary: '#64748b'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <!-- Header -->
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-800">Deletion Arms Designer</h1>
+            <p class="text-gray-600 mt-2">Design gene knockout constructs using half-site restriction enzyme strategy</p>
+        </header>
+
+        <!-- Main Form -->
+        <form id="designForm" class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <!-- File Upload -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    FASTA Sequences
+                </label>
+                <div id="dropZone" class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors cursor-pointer">
+                    <input type="file" id="fastaFile" accept=".fasta,.fa,.fna,.txt" class="hidden">
+                    <div id="dropZoneContent">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        <p class="mt-2 text-sm text-gray-600">
+                            <span class="font-medium text-primary">Click to upload</span> or drag and drop
+                        </p>
+                        <p class="mt-1 text-xs text-gray-500">FASTA file (.fasta, .fa)</p>
+                    </div>
+                    <div id="fileInfo" class="hidden">
+                        <p class="text-sm text-green-600 font-medium" id="fileName"></p>
+                        <button type="button" id="clearFile" class="mt-2 text-xs text-red-500 hover:text-red-700">Clear</button>
+                    </div>
+                </div>
+                <!-- Or paste sequences -->
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Or paste sequences directly:
+                    </label>
+                    <textarea id="sequencesText" rows="4" class="w-full border border-gray-300 rounded-md p-3 text-sm font-mono focus:ring-primary focus:border-primary" placeholder=">Gene1&#10;ATCGATCGATCG..."></textarea>
+                </div>
+            </div>
+
+            <!-- Parameters Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+                <!-- Arm Length -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Arm Length (bp)
+                    </label>
+                    <input type="number" id="armLength" value="1500" min="500" max="5000" class="w-full border border-gray-300 rounded-md p-2 focus:ring-primary focus:border-primary">
+                </div>
+
+                <!-- Half-site Min -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Half-site Min (bp)
+                    </label>
+                    <input type="number" id="halfSiteMin" value="900" min="0" class="w-full border border-gray-300 rounded-md p-2 focus:ring-primary focus:border-primary">
+                </div>
+
+                <!-- Half-site Max -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Half-site Max (bp)
+                    </label>
+                    <input type="number" id="halfSiteMax" value="1300" min="0" class="w-full border border-gray-300 rounded-md p-2 focus:ring-primary focus:border-primary">
+                </div>
+
+                <!-- Max Designs -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Max Designs per Gene
+                    </label>
+                    <input type="number" id="maxDesigns" value="5" min="1" max="100" class="w-full border border-gray-300 rounded-md p-2 focus:ring-primary focus:border-primary">
+                </div>
+
+                <!-- Optimization Balance -->
+                <div class="lg:col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Optimization Priority
+                    </label>
+                    <div class="flex items-center gap-4">
+                        <span class="text-sm text-gray-600 w-24">Cost (<span id="costWeightValue" class="font-bold">0.5</span>)</span>
+                        <input type="range" id="optimizationBalance" value="0.5" min="0" max="1" step="0.1" class="flex-1 h-2 bg-gradient-to-r from-green-200 via-gray-200 to-blue-200 rounded-lg appearance-none cursor-pointer">
+                        <span class="text-sm text-gray-600 w-24 text-right">Length (<span id="lengthWeightValue" class="font-bold">0.5</span>)</span>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1 text-center">Slide left to prioritize lower enzyme cost, right to prioritize longer arms</p>
+                </div>
+            </div>
+
+            <!-- Enzyme Selection (Collapsible) -->
+            <div class="mb-6">
+                <button type="button" id="toggleEnzymes" class="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-primary">
+                    <svg id="enzymeArrow" class="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                    Filter by Available Enzymes (optional)
+                </button>
+                <div id="enzymeSection" class="hidden mt-4">
+                    <p class="text-sm text-gray-500 mb-3">Uncheck enzymes you don't have in your freezer. Only checked enzymes will be used in designs.</p>
+                    <div class="flex gap-4 mb-3">
+                        <button type="button" id="selectAllEnzymes" class="text-xs text-primary hover:underline">Select All</button>
+                        <button type="button" id="deselectAllEnzymes" class="text-xs text-primary hover:underline">Deselect All</button>
+                    </div>
+                    <div id="enzymeList" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-48 overflow-y-auto border border-gray-200 rounded-md p-3">
+                        <p class="text-sm text-gray-400">Loading enzymes...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <div class="flex gap-4">
+                <button type="submit" id="submitBtn" class="bg-primary text-white px-6 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium">
+                    Design Constructs
+                </button>
+                <button type="button" id="resetBtn" class="bg-gray-200 text-gray-700 px-6 py-2 rounded-md hover:bg-gray-300 transition-colors">
+                    Reset
+                </button>
+            </div>
+        </form>
+
+        <!-- Loading Indicator -->
+        <div id="loading" class="hidden bg-white rounded-lg shadow-md p-6 mb-8 text-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+            <p class="mt-4 text-gray-600">Designing constructs...</p>
+        </div>
+
+        <!-- Results Section -->
+        <div id="results" class="hidden">
+            <!-- Summary -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">Results Summary</h2>
+                <div id="summary" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <!-- Populated by JavaScript -->
+                </div>
+                <!-- Download Buttons -->
+                <div class="mt-6 flex gap-4">
+                    <button id="downloadFasta" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors text-sm">
+                        Download FASTA
+                    </button>
+                    <button id="downloadReport" class="bg-secondary text-white px-4 py-2 rounded-md hover:bg-gray-600 transition-colors text-sm">
+                        Download Report
+                    </button>
+                </div>
+            </div>
+
+            <!-- Gene Results -->
+            <div id="geneResults">
+                <!-- Populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Error Display -->
+        <div id="error" class="hidden bg-red-50 border border-red-200 rounded-lg p-4 mb-8">
+            <p class="text-red-700" id="errorMessage"></p>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

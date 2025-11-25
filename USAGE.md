@@ -244,6 +244,56 @@ PmlI	CAC⇅GTG	inexpensive	331	10000	$0.0331/unit
 - Enzymes are automatically sorted by cost per unit
 - Pre-screened to not cut vectors: pR-B, pR-H, pR-N, pR-Z
 
+## Web Interface
+
+A web-based interface is also available for designing constructs interactively.
+
+### Running Locally
+
+```bash
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. Start the web server
+uvicorn web.app:app --host 0.0.0.0 --port 8000
+
+# 3. Open in browser
+# http://localhost:8000
+```
+
+### Running with Docker
+
+```bash
+# Build the Docker image
+docker build -t deletion-arms .
+
+# Run the container
+docker run -p 8000:8000 deletion-arms
+
+# Open in browser
+# http://localhost:8000
+```
+
+### Web Interface Features
+
+- **File upload or paste** - Upload FASTA files or paste sequences directly
+- **Adjustable parameters** - Arm length, half-site range, max designs
+- **Optimization slider** - Balance between enzyme cost and arm length
+- **Enzyme filtering** - Select only enzymes you have available in your freezer
+- **Download results** - Export as FASTA or detailed text report
+- **Interactive results** - Expandable details for each design
+
+### API Endpoints
+
+The web interface also exposes a REST API:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/enzymes` | GET | List all available enzymes |
+| `/api/design` | POST | Design constructs (JSON response) |
+| `/api/design/fasta` | POST | Design constructs (FASTA download) |
+| `/api/design/report` | POST | Design constructs (text report download) |
+
 ## Troubleshooting
 
 ### No designs found
