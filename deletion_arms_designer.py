@@ -450,6 +450,62 @@ class DeletionArmsDesigner:
 
         return deduplicated
 
+    def filter_close_half_sites(self, matches: List[HalfSiteMatch],
+                               min_distance: int = 50,
+                               prefer_longer_arm: bool = True) -> List[HalfSiteMatch]:
+        """
+        Filter out half-sites that are within min_distance bp of each other,
+        keeping only the one that produces the longest arm.
+
+        This reduces redundant designs where the same enzyme appears with
+        slightly different arm lengths (e.g., only 10-50 bp difference).
+
+        Args:
+            matches: List of HalfSiteMatch objects for a single enzyme
+            min_distance: Minimum distance in bp between sites (default: 50)
+            prefer_longer_arm: If True, keep the site that produces longer arm
+
+        Returns:
+            Filtered list with close sites removed
+        """
+        if not matches:
+            return matches
+
+        # Sort by position
+        sorted_matches = sorted(matches, key=lambda m: m.position)
+
+        filtered = []
+        i = 0
+
+        while i < len(sorted_matches):
+            current = sorted_matches[i]
+            group = [current]
+
+            # Find all matches within min_distance
+            j = i + 1
+            while j < len(sorted_matches) and sorted_matches[j].position - current.position < min_distance:
+                group.append(sorted_matches[j])
+                j += 1
+
+            # From this group, pick the one that produces the longest arm
+            if prefer_longer_arm:
+                # For downstream (left half), higher position = longer arm
+                # For upstream (right half), lower position = longer arm
+                if group[0].is_left_half:
+                    # Downstream arm: prefer highest position
+                    best = max(group, key=lambda m: m.position)
+                else:
+                    # Upstream arm: prefer lowest position
+                    best = min(group, key=lambda m: m.position)
+            else:
+                # Just keep the first one
+                best = group[0]
+
+            filtered.append(best)
+            i = j  # Move to next group
+
+        return filtered
+
     def deduplicate_designs_by_position(self, designs: List[ConstructDesign]) -> List[ConstructDesign]:
         """
         Deduplicate designs that have the same half-site positions but use different enzymes.
@@ -483,6 +539,44 @@ class DeletionArmsDesigner:
             deduplicated.append(pos_designs[0])
 
         return deduplicated
+
+    def select_diverse_designs(self, designs: List[ConstructDesign], max_designs: int) -> List[ConstructDesign]:
+        """
+        Select designs prioritizing enzyme diversity over slight variations in arm length.
+
+        This ensures we show designs with different enzyme combinations rather than
+        multiple designs with the same enzymes but slightly different positions.
+
+        Args:
+            designs: List of ConstructDesign objects (should be pre-sorted by score)
+            max_designs: Maximum number of designs to return
+
+        Returns:
+            List of up to max_designs, prioritizing enzyme diversity
+        """
+        if len(designs) <= max_designs:
+            return designs
+
+        selected = []
+        enzyme_pairs_used = set()
+
+        # First pass: pick best design for each unique enzyme pair
+        for design in designs:
+            enzyme_pair = (design.re1.name, design.re2.name)
+            if enzyme_pair not in enzyme_pairs_used:
+                selected.append(design)
+                enzyme_pairs_used.add(enzyme_pair)
+                if len(selected) >= max_designs:
+                    return selected
+
+        # Second pass: if we still have room, add remaining designs by score
+        for design in designs:
+            if design not in selected:
+                selected.append(design)
+                if len(selected) >= max_designs:
+                    return selected
+
+        return selected
 
     def check_full_site_absent(self, sequence: str, enzyme: RestrictionEnzyme,
                               before_position: int) -> bool:
@@ -587,6 +681,10 @@ class DeletionArmsDesigner:
                 if not downstream_matches:
                     continue
 
+                # Filter out half-sites that are too close together (within 50 bp)
+                # Keep only the one that produces the longest arm
+                downstream_matches = self.filter_close_half_sites(downstream_matches, min_distance=50)
+
                 # Check vector if provided
                 if vector_seq:
                     possible_sites = self.expand_degenerate(re1.full_site)
@@ -613,6 +711,10 @@ class DeletionArmsDesigner:
 
                         if not upstream_matches:
                             continue
+
+                        # Filter out half-sites that are too close together (within 50 bp)
+                        # Keep only the one that produces the longest arm
+                        upstream_matches = self.filter_close_half_sites(upstream_matches, min_distance=50)
 
                         # Check vector if provided
                         if vector_seq:
@@ -655,8 +757,10 @@ class DeletionArmsDesigner:
                 d.re2.name
             ))
 
-            # Take only the best designs up to max_designs
-            designs_for_gene = designs_for_gene[:max_designs]
+            # Select designs prioritizing enzyme diversity
+            # This ensures different enzyme combinations are shown rather than
+            # multiple variations of the same enzyme pair
+            designs_for_gene = self.select_diverse_designs(designs_for_gene, max_designs)
 
             print(f"  Found {len(designs_for_gene)} valid design(s)")
             all_designs.extend(designs_for_gene)
